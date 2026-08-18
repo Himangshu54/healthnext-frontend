@@ -1,119 +1,66 @@
-import { useState } from 'react'
-import Navbar from './components/Navbar'
+import { useEffect, useRef, useState } from 'react'
+import { ArrowRight, BarChart3, Check, ChevronDown, ClipboardList, Eye, EyeOff, FileText, HeartPulse, Home, LogOut, Menu, MonitorSmartphone, Plus, Search, Settings, ShieldCheck, UserRound, Users, X } from 'lucide-react'
+import { AuthProvider, useAuth } from './context/AuthContext'
+import { createId, findPatientByNameAndPhone, nextPatientId, savePatient, saveReport, getPatients } from './data/storage'
 import './App.css'
 
-const tabItems = [
-  { id: 'create-session', label: 'Create Session' },
-  { id: 'patients-data', label: 'Patients Data' },
-  { id: 'generate-report', label: 'Generate Report' },
-  { id: 'report-analysis', label: 'Report Analysis' },
-  { id: 'user-management', label: 'User Management' },
+const navItems = [
+  { path: '/', label: 'Dashboard', icon: Home },
+  { path: '/create-session', label: 'Create Session', icon: Plus },
+  { path: '/patients', label: 'Patients Data', icon: Users },
+  { path: '/generate-report', label: 'Generate Report', icon: FileText },
+  { path: '/report-analysis', label: 'Report Analysis', icon: BarChart3 },
+]
+const fields = [
+  ['hemoglobin', 'Hemoglobin', 'g/dL', 'e.g. 12.4'], ['glucose', 'Glucose', 'mg/dL', 'e.g. 94'], ['ph', 'pH', '', 'e.g. 6.5'],
+  ['protein', 'Protein', '', 'e.g. Negative or Trace'], ['bloodPressure', 'Blood Pressure', 'mmHg', 'e.g. 120/80'], ['spo2', 'SpO2 / Oxygen Level', '%', 'e.g. 98'],
 ]
 
-function App() {
-  const [activeTab, setActiveTab] = useState('create-session')
-  const [deviceName, setDeviceName] = useState('No device connected')
-  const [isConnecting, setIsConnecting] = useState(false)
-  const [isConnected, setIsConnected] = useState(false)
+function navigate(path) { window.history.pushState({}, '', path); window.dispatchEvent(new PopStateEvent('popstate')) }
+function formatDate(value) { return value ? new Date(value).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : 'Not recorded' }
+function Logo({ compact = false }) { return <div className="brand"><span className="brand-mark"><HeartPulse size={compact ? 18 : 22} /></span><span><strong>HealthNext</strong>{!compact && <small>Diagnostic Hub</small>}</span></div> }
+function Button({ children, variant = 'primary', icon: Icon, ...props }) { return <button className={`button button-${variant}`} {...props}>{Icon && <Icon size={17} />}{children}</button> }
+function Field({ label, name, value, onChange, error, type = 'text', placeholder, required = false, readOnly = false }) { return <label className="field"><span>{label}{required && <b> *</b>}</span><input type={type} name={name} value={value ?? ''} onChange={onChange} placeholder={placeholder} aria-invalid={Boolean(error)} readOnly={readOnly || name === 'id'} />{error && <em>{error}</em>}</label> }
+function PageHeader({ eyebrow, title, subtitle }) { return <div className="page-header"><span className="eyebrow">{eyebrow}</span><h1>{title}</h1><p>{subtitle}</p></div> }
 
-  const handleConnectDevice = async () => {
-    if (!navigator.bluetooth) {
-      window.alert('Web Bluetooth is not supported in this browser.')
-      return
-    }
-
-    try {
-      setIsConnecting(true)
-      const device = await navigator.bluetooth.requestDevice({
-        acceptAllDevices: true,
-        optionalServices: [],
-      })
-
-      if (device.gatt) {
-        await device.gatt.connect()
-      }
-
-      setDeviceName(device.name || 'Bluetooth device')
-      setIsConnected(true)
-
-      device.addEventListener('gattserverdisconnected', () => {
-        setIsConnected(false)
-        setDeviceName('No device connected')
-      })
-    } catch (error) {
-      if (error?.name !== 'NotFoundError') {
-        window.alert('Could not connect to the Bluetooth device.')
-      }
-    } finally {
-      setIsConnecting(false)
-    }
-  }
-
-  return (
-    <div className="relative min-h-screen overflow-hidden bg-white text-slate-900">
-      <div className="pointer-events-none fixed inset-0 -z-10 bg-[radial-gradient(circle_at_top,rgba(16,185,129,0.08),transparent_35%),linear-gradient(180deg,rgba(255,255,255,1)_0%,rgba(248,250,252,1)_100%)]" />
-      <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden select-none">
-        <div className="absolute -top-10 left-0 flex w-[160%] flex-wrap gap-8 whitespace-nowrap -rotate-12 opacity-[0.07]">
-          {Array.from({ length: 20 }).map((_, index) => (
-            <span
-              key={`watermark-top-${index}`}
-              className="text-6xl font-black tracking-[0.35em] text-emerald-700 sm:text-7xl lg:text-8xl"
-            >
-              HealthNext
-            </span>
-          ))}
-        </div>
-        <div className="absolute top-1/3 -left-16 flex w-[170%] flex-wrap gap-8 whitespace-nowrap rotate-12 opacity-[0.05]">
-          {Array.from({ length: 22 }).map((_, index) => (
-            <span
-              key={`watermark-bottom-${index}`}
-              className="text-6xl font-black tracking-[0.35em] text-emerald-700 sm:text-7xl lg:text-8xl"
-            >
-              HealthNext
-            </span>
-          ))}
-        </div>
-      </div>
-      <div className="relative z-10">
-      <Navbar
-        deviceName={deviceName}
-        isConnected={isConnected}
-        isConnecting={isConnecting}
-        onConnectDevice={handleConnectDevice}
-      />
-      <main className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-6 sm:py-8 lg:px-8 lg:py-10">
-        <section className="space-y-4">
-          {tabItems.map((item, index) => {
-            const isActive = activeTab === item.id
-            const toneClasses = [
-              'from-emerald-50 to-emerald-100/60',
-              'from-emerald-50 to-emerald-50',
-              'from-emerald-100 to-emerald-50',
-              'from-emerald-50 to-lime-50',
-              'from-emerald-100 to-lime-50',
-            ]
-
-            return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => setActiveTab(item.id)}
-                aria-pressed={isActive}
-                className={`w-full rounded-3xl border px-5 py-5 text-left text-base font-semibold bg-linear-to-r shadow-sm transition duration-300 ease-out focus:outline-none focus:ring-2 focus:ring-emerald-300 focus:ring-offset-2 focus:ring-offset-white motion-safe:hover:-translate-y-1 motion-safe:hover:shadow-lg active:scale-[0.99] sm:px-8 sm:py-7 sm:text-xl ${toneClasses[index % toneClasses.length]} ${
-                  isActive
-                      ? 'border-emerald-300 text-emerald-950 ring-1 ring-emerald-200 shadow-emerald-200/60'
-                      : 'border-emerald-100 text-emerald-900 hover:border-emerald-300 hover:ring-1 hover:ring-emerald-200/70'
-                }`}
-              >
-                <span className="mt-2 block">{item.label}</span>
-              </button>
-            )
-          })}
-        </section>
-      </main>
-      </div>
-    </div>
-  )
+function Login() {
+  const { worker, login } = useAuth(); const [form, setForm] = useState({ identifier: '', password: '' }); const [error, setError] = useState(''); const [show, setShow] = useState(false); const [loading, setLoading] = useState(false)
+  useEffect(() => { if (worker) navigate('/') }, [worker])
+  function submit(event) { event.preventDefault(); setError(''); if (!form.identifier || !form.password) return setError('Enter your Worker ID or email and password.'); setLoading(true); window.setTimeout(() => { const result = login(form.identifier, form.password); if (!result.success) setError(result.error); setLoading(false) }, 350) }
+  return <div className="login-page"><div className="login-aside"><Logo /><div><span className="eyebrow">FIELD OPERATIONS</span><h1>Clearer screening.<br /><i>Earlier action.</i></h1><p>A focused workspace for teams bringing reliable diagnostic screening closer to rural communities.</p></div><div className="aside-note"><ShieldCheck size={18} /><span>Designed for secure, structured records</span></div></div><main className="login-card"><Logo compact /><div className="login-copy"><h2>Welcome back</h2><p>Sign in to access the HealthNext Diagnostic Hub</p></div><form onSubmit={submit}><Field label="Worker ID or Email" name="identifier" value={form.identifier} onChange={(e) => setForm({ ...form, identifier: e.target.value })} placeholder="WORKER001" required /><label className="field"><span>Password *</span><div className="password-wrap"><input type={show ? 'text' : 'password'} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder="Enter your password" /><button type="button" className="input-action" onClick={() => setShow(!show)} aria-label={show ? 'Hide password' : 'Show password'}>{show ? <EyeOff size={17} /> : <Eye size={17} />}</button></div></label><label className="checkbox"><input type="checkbox" defaultChecked /> <span>Remember me on this device</span></label>{error && <div className="feedback error">{error}</div>}<Button type="submit" disabled={loading}>{loading ? 'Signing in...' : 'Sign in'} {!loading && <ArrowRight size={17} />}</Button></form><p className="demo-hint">Demo access: <strong>WORKER001</strong> / <strong>worker123</strong></p></main></div>
 }
 
+function ProfileMenu() {
+  const { worker, logout } = useAuth(); const [open, setOpen] = useState(false); const ref = useRef(null)
+  useEffect(() => { function close(event) { if (ref.current && !ref.current.contains(event.target)) setOpen(false) } function escape(event) { if (event.key === 'Escape') setOpen(false) } document.addEventListener('mousedown', close); document.addEventListener('keydown', escape); return () => { document.removeEventListener('mousedown', close); document.removeEventListener('keydown', escape) } }, [])
+  return <div className="profile-wrap" ref={ref}><button className="profile-trigger" onClick={() => setOpen(!open)} aria-expanded={open} aria-haspopup="menu"><span className="avatar">{worker.name.charAt(0)}</span><span className="profile-name"><strong>{worker.name}</strong><small>{worker.role}</small></span><ChevronDown size={16} /></button>{open && <div className="profile-menu"><div className="menu-person"><span className="avatar large">{worker.name.charAt(0)}</span><div><strong>{worker.name}</strong><small>{worker.id}</small></div></div><button onClick={() => navigate('/profile')}><UserRound size={16} /> Profile</button><button><Settings size={16} /> Settings</button><button className="logout" onClick={() => { logout(); navigate('/login') }}><LogOut size={16} /> Logout</button></div>}</div>
+}
+
+function Shell({ children, path }) {
+  const [mobileOpen, setMobileOpen] = useState(false); const device = 'No device connected'
+  return <div className="app-shell"><aside className={`sidebar ${mobileOpen ? 'mobile-open' : ''}`}><div className="sidebar-top"><Logo compact /><button className="close-mobile" onClick={() => setMobileOpen(false)} aria-label="Close navigation"><X size={20} /></button></div><nav>{navItems.map(({ path: itemPath, label, icon: Icon }) => <button key={itemPath} className={path === itemPath ? 'active' : ''} onClick={() => { navigate(itemPath); setMobileOpen(false) }}><Icon size={19} /><span>{label}</span></button>)}</nav><div className="sidebar-footer"><MonitorSmartphone size={17} /><span>{device}</span></div></aside>{mobileOpen && <button className="scrim" onClick={() => setMobileOpen(false)} aria-label="Close navigation" /> }<div className="main-shell"><header className="topbar"><button className="menu-toggle" onClick={() => setMobileOpen(true)} aria-label="Open navigation"><Menu size={22} /></button><span className="header-device"><i />{device}</span><div className="topbar-brand"><Logo /></div><ProfileMenu /></header><main className="content">{children}</main></div></div>
+}
+
+function Dashboard() { const cards = [{ title: 'Create Session', description: 'Start a new diagnostic session and record patient test readings.', icon: ClipboardList, path: '/create-session' }, { title: 'Patients Data', description: 'View patient records and their diagnostic history.', icon: Users, path: '/patients' }, { title: 'Generate Report', description: 'Verify a patient and generate a diagnostic report.', icon: FileText, path: '/generate-report' }, { title: 'Report Analysis', description: 'Review previous reports and analyze changes in patient history.', icon: BarChart3, path: '/report-analysis' }]; return <><PageHeader eyebrow="WORKSPACE" title="Welcome to HealthNext" /><section className="feature-grid">{cards.map(({ title, description, icon: Icon, path }) => <button className="feature-card" key={path} onClick={() => navigate(path)}><span className="feature-icon"><Icon size={22} /></span><span className="feature-body"><strong>{title}</strong><span>{description}</span></span><ArrowRight className="feature-arrow" size={19} /></button>)}</section></> }
+
+function CreateSession() { const [step, setStep] = useState(1); const [patient, setPatient] = useState({ id: nextPatientId(), name: '', age: '', gender: '', phone: '', email: '', address: '', medicalHistory: '' }); const [readings, setReadings] = useState(Object.fromEntries(fields.map(([name]) => [name, '']))); const [errors, setErrors] = useState({}); const [existing, setExisting] = useState(null); const [complete, setComplete] = useState(null)
+  function change(event) { const { name, value } = event.target; const nextPatient = { ...patient, [name]: value }; if (name === 'name' || name === 'phone') { const found = nextPatient.name && nextPatient.phone ? findPatientByNameAndPhone(nextPatient.name, nextPatient.phone) : null; setExisting(found || (nextPatient.name && nextPatient.phone ? 'new' : null)); if (found) return setPatient(found) } setPatient(nextPatient) }
+  function validatePatient() { const required = ['name', 'phone', 'age', 'gender']; const next = Object.fromEntries(required.filter((name) => !patient[name]).map((name) => [name, 'This field is required.'])); setErrors(next); return !Object.keys(next).length }
+  function validateReadings() { const next = {}; fields.forEach(([name]) => { if (!readings[name]) next[name] = 'Enter a value.' }); setErrors(next); return !Object.keys(next).length }
+  function save() { const now = new Date().toISOString(); const savedPatient = { ...patient, age: Number(patient.age), createdAt: existing && existing !== 'new' ? existing.createdAt : now, testHistory: existing && existing !== 'new' ? existing.testHistory : [] }; const session = { sessionId: createId('SESSION'), date: now, ...readings }; savedPatient.testHistory = [...savedPatient.testHistory, session]; savePatient(savedPatient); setComplete({ patient: savedPatient, session }); setStep(4) }
+  if (complete) return <div className="success-state"><span className="success-icon"><Check size={30} /></span><PageHeader eyebrow="SESSION COMPLETE" title="Diagnostic session completed successfully." subtitle={`${complete.patient.name} has been added to the patient history.`} /><div className="detail-card"><div><span>Session ID</span><strong>{complete.session.sessionId}</strong></div><div><span>Patient</span><strong>{complete.patient.id} · {complete.patient.name}</strong></div><div><span>Recorded</span><strong>{formatDate(complete.session.date)}</strong></div></div><div className="form-actions"><Button variant="secondary" onClick={() => { setComplete(null); setStep(1); setPatient({ id: '', name: '', age: '', gender: '', phone: '', email: '', address: '', medicalHistory: '' }); setReadings(Object.fromEntries(fields.map(([name]) => [name, '']))) }}>Start another session</Button><Button onClick={() => navigate('/patients')}>View patients <ArrowRight size={17} /></Button></div></div>
+  return <><PageHeader eyebrow="NEW WORKFLOW" title="Create diagnostic session" subtitle="Identify the patient, record readings, and review the session before saving." /><div className="stepper">{['Patient', 'Test Readings', 'Review', 'Complete'].map((label, index) => <div className={step >= index + 1 ? 'step active' : 'step'} key={label}><span>{index + 1}</span>{label}</div>)}</div><section className="form-card">{step === 1 && <><div className="section-title"><div><h2>Patient identification</h2><p>Search by Patient ID to continue an existing history or create a new record.</p></div>{existing && <span className={`status-tag ${existing === 'new' ? 'new' : ''}`}>{existing === 'new' ? 'New Patient' : 'Existing Patient'}</span>}</div><div className="form-grid"><Field label="Patient ID" name="id" value={patient.id} onChange={change} error={errors.id} placeholder="e.g. P001" required /><Field label="Patient Name" name="name" value={patient.name} onChange={change} error={errors.name} placeholder="Full name" required /><Field label="Age" name="age" type="number" value={patient.age} onChange={change} error={errors.age} placeholder="Years" required /><label className="field"><span>Gender *</span><select name="gender" value={patient.gender} onChange={change}><option value="">Select gender</option><option>Female</option><option>Male</option><option>Non-binary</option><option>Prefer not to say</option></select>{errors.gender && <em>{errors.gender}</em>}</label><Field label="Phone" name="phone" value={patient.phone} onChange={change} placeholder="Optional" /><Field label="Email" name="email" type="email" value={patient.email} onChange={change} placeholder="Optional" /><Field label="Address" name="address" value={patient.address} onChange={change} placeholder="Optional" /><Field label="Medical History" name="medicalHistory" value={patient.medicalHistory} onChange={change} placeholder="Optional" /></div>{existing && existing !== 'new' && <div className="inline-note"><Check size={16} /> Previous test: {formatDate(existing.testHistory.at(-1)?.date)}. A new session will be appended.</div>}<div className="form-actions"><Button onClick={() => validatePatient() && setStep(2)}>Continue <ArrowRight size={17} /></Button></div></>}{step === 2 && <><div className="section-title"><div><h2>Test readings</h2><p>Enter recorded measurements. These values are stored as provided and are not interpreted.</p></div><span className="status-tag">Manual entry</span></div><div className="form-grid">{fields.map(([name, label, unit, placeholder]) => <label className="field" key={name}><span>{label} {unit && <small>({unit})</small>} *</span><input name={name} value={readings[name]} onChange={(e) => setReadings({ ...readings, [name]: e.target.value })} placeholder={placeholder} />{errors[name] && <em>{errors[name]}</em>}</label>)}</div><div className="form-actions"><Button variant="secondary" onClick={() => setStep(1)}>Back</Button><Button onClick={() => validateReadings() && setStep(3)}>Review <ArrowRight size={17} /></Button></div></>}{step === 3 && <><div className="section-title"><div><h2>Review session</h2><p>Confirm the details below before saving this diagnostic session.</p></div></div><div className="review-block"><h3>Patient details</h3><div className="review-grid">{[['Patient ID', patient.id], ['Name', patient.name], ['Age', `${patient.age} years`], ['Gender', patient.gender]].map(([label, value]) => <div key={label}><span>{label}</span><strong>{value}</strong></div>)}</div></div><div className="review-block"><h3>Readings · {formatDate(new Date())}</h3><div className="review-grid readings">{fields.map(([name, label, unit]) => <div key={name}><span>{label}</span><strong>{readings[name]} {unit}</strong></div>)}</div></div><div className="form-actions"><Button variant="secondary" onClick={() => { setStep(1); setErrors({}) }}>Reset</Button><Button variant="ghost" onClick={() => navigate('/')}>Cancel</Button><Button onClick={save}>Save Test Results <Check size={17} /></Button></div></>}</section></>
+}
+
+function Patients() { const patients = getPatients(); return <><PageHeader eyebrow="RECORDS" title="Patients Data" subtitle="Registered patients and their diagnostic history will appear here." /><div className="patient-list">{patients.map((patient) => { const latest = patient.testHistory.at(-1); return <div className="patient-row" key={patient.id}><div className="patient-avatar">{patient.name.charAt(0)}</div><div className="patient-main"><strong>{patient.name}</strong><span>{patient.id} · {patient.phone} · {patient.age} years · {patient.gender}</span></div><div className="patient-readings"><span>Hb <b>{latest.hemoglobin}</b></span><span>Glucose <b>{latest.glucose}</b></span><span>pH <b>{latest.ph}</b></span><span>Protein <b>{latest.protein}</b></span><span>BP <b>{latest.bloodPressure}</b></span><span>SpO2 <b>{latest.spo2}%</b></span></div><small className="patient-history">{patient.testHistory.length} tests</small></div> })}</div></> }
+
+function VerifyForm({ onVerify, error }) { const [form, setForm] = useState({ name: '', phone: '' }); return <div className="verify-card"><div className="section-title"><div><h2>Patient verification</h2><p>Patient Name and Phone Number must match the stored record.</p></div><Search size={21} className="muted-icon" /></div><div className="form-grid two"><Field label="Patient Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Full name" required /><Field label="Phone Number" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="e.g. 9876501001" required /></div>{error && <div className="feedback error">{error}</div>}<Button onClick={() => onVerify(form)}>Verify Patient <ArrowRight size={17} /></Button></div> }
+function GenerateReport() { const [patient, setPatient] = useState(null); const [error, setError] = useState(''); const [selected, setSelected] = useState(''); const [report, setReport] = useState(null); function verify(form) { const found = form.name && form.phone ? findPatientByNameAndPhone(form.name, form.phone) : null; if (!found) { setError('Patient not found. Please verify the Patient Name and Phone Number.'); setPatient(null) } else { setError(''); setPatient(found); setSelected(found.testHistory.at(-1)?.sessionId || '') } } function generate() { const session = patient.testHistory.find((item) => item.sessionId === selected); const saved = saveReport({ reportId: createId('REPORT'), patientId: patient.id, sessionId: session.sessionId, generatedAt: new Date().toISOString(), testData: { ...session, patientName: patient.name, phone: patient.phone, age: patient.age, gender: patient.gender } }); setReport(saved) } return <><PageHeader eyebrow="REPORTS" title="Generate report" subtitle="Create a structured record from a verified patient session." />{report ? <div className="success-state compact"><span className="success-icon"><Check size={30} /></span><h2>Report generated successfully.</h2><p>Report {report.reportId} is linked to {report.patientId} and session {report.sessionId}.</p><Button onClick={() => setReport(null)} icon={FileText}>View Report</Button></div> : <><VerifyForm onVerify={verify} error={error} />{patient && <div className="form-card report-flow"><div className="verified-banner"><ShieldCheck size={19} /><div><strong>Patient verified</strong><span>{patient.id} · {patient.name} · {patient.phone} · Last test {formatDate(patient.testHistory.at(-1)?.date)}</span></div></div><h2>Select test session</h2><div className="session-list">{patient.testHistory.map((session) => <label className={`session-row ${selected === session.sessionId ? 'selected' : ''}`} key={session.sessionId}><input type="radio" name="session" checked={selected === session.sessionId} onChange={() => setSelected(session.sessionId)} /><span><strong>{formatDate(session.date)}</strong><small>{session.sessionId}</small></span><em>Recorded</em></label>)}</div><Button onClick={generate} disabled={!selected}>Generate Diagnostic Report <FileText size={17} /></Button></div>}</>}</> }
+
+function Analysis() { const [patient, setPatient] = useState(null); const [error, setError] = useState(''); function verify(form) { const found = form.name && form.phone ? findPatientByNameAndPhone(form.name, form.phone) : null; if (!found) { setError('Patient not found. Please verify the Patient Name and Phone Number.'); setPatient(null) } else { setError(''); setPatient(found) } } const history = patient?.testHistory || []; const current = history.at(-1); const previous = history.at(-2); const compare = (name) => { const oldValue = Number.parseFloat(previous?.[name]); const newValue = Number.parseFloat(current?.[name]); const bothNumbers = Number.isFinite(oldValue) && Number.isFinite(newValue); const difference = bothNumbers ? newValue - oldValue : null; const percent = bothNumbers && oldValue !== 0 ? (difference / oldValue) * 100 : null; return { oldValue: previous?.[name] ?? '—', newValue: current?.[name] ?? '—', difference, percent } }; return <><PageHeader eyebrow="ANALYSIS" title="Report analysis" subtitle="Compare recorded sessions and review factual changes in patient history." />{!patient ? <VerifyForm onVerify={verify} error={error} /> : history.length < 2 ? <div className="empty-state"><span className="empty-icon"><BarChart3 size={28} /></span><h2>More history is needed for comparison.</h2><p>{patient.name} has {history.length} recorded session. Create another session to compare changes.</p><Button onClick={() => navigate('/create-session')} icon={Plus}>Create Diagnostic Session</Button></div> : <><div className="verified-banner standalone"><ShieldCheck size={19} /><div><strong>Patient verified · {patient.name}</strong><span>{patient.id} · {patient.phone} · {patient.gender} · {patient.age} years</span></div></div><div className="analysis-card"><div className="section-title"><div><h2>Session comparison</h2><p>Latest session compared with the previous recorded session.</p></div></div><div className="comparison-table"><div className="comparison-head"><span>Parameter</span><span>Previous</span><span>Current</span><span>Difference</span><span>Trend</span></div>{fields.map(([name, label, unit]) => { const item = compare(name); const direction = item.difference > 0 ? 'up' : item.difference < 0 ? 'down' : 'same'; return <div className="comparison-row" key={name}><strong>{label}<small>{unit}</small></strong><span>{item.oldValue}</span><span>{item.newValue}</span><span>{item.difference === null ? '—' : `${item.difference > 0 ? '+' : ''}${item.difference.toFixed(2)}${item.percent === null ? '' : ` (${item.percent.toFixed(1)}%)`}`}</span><span className={`trend ${direction}`}>{direction === 'up' ? '↑ Increased' : direction === 'down' ? '↓ Decreased' : '→ No change'}</span></div> })}</div></div><div className="analysis-card"><h2>Patient History Analysis</h2><p>Compared with the previous session on {formatDate(previous.date)}, the latest session on {formatDate(current.date)} records changes across the measurements shown above. This summary describes recorded values only and does not provide a medical diagnosis or treatment recommendation.</p><div className="history-strip">{history.map((item, index) => <div key={item.sessionId}><span>{index + 1}</span><small>{formatDate(item.date).split(',')[0]}</small></div>)}</div></div></>}</> }
+
+function Profile() { const { worker, logout } = useAuth(); return <><PageHeader eyebrow="ACCOUNT" title="Profile" subtitle="Your HealthNext worker account details." /><div className="profile-card"><span className="avatar profile-avatar">{worker.name.charAt(0)}</span><div className="profile-detail"><h2>{worker.name}</h2><p>{worker.role}</p><div className="detail-card"><div><span>Worker ID</span><strong>{worker.id}</strong></div><div><span>Email</span><strong>{worker.email}</strong></div><div><span>Role</span><strong>{worker.role}</strong></div></div><Button variant="secondary" onClick={() => { logout(); navigate('/login') }} icon={LogOut}>Log out</Button></div></div></> }
+
+function Router() { const { worker } = useAuth(); const [path, setPath] = useState(window.location.pathname); useEffect(() => { const onPop = () => setPath(window.location.pathname); window.addEventListener('popstate', onPop); return () => window.removeEventListener('popstate', onPop) }, []); useEffect(() => { const protectedPath = path !== '/login'; if (!worker && protectedPath) navigate('/login'); if (worker && path === '/login') navigate('/') }, [path, worker]); if (!worker) return <Login />; const pages = { '/': <Dashboard />, '/create-session': <CreateSession />, '/patients': <Patients />, '/generate-report': <GenerateReport />, '/report-analysis': <Analysis />, '/profile': <Profile /> }; return <Shell path={path}>{pages[path] || <Dashboard />}</Shell> }
+function App() { return <AuthProvider><Router /></AuthProvider> }
 export default App
