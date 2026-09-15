@@ -1,5 +1,12 @@
 const PATIENTS_KEY = 'healthnext.patients'
 const REPORTS_KEY = 'healthnext.reports'
+const USERS_KEY = 'healthnext.users'
+
+const demoUsers = [
+  { id: 'WORKER001', name: 'Sunita Kumari', email: 'sunita.kumari@healthnext.org', phone: '+91 98765 01011', role: 'Field Health Worker', district: 'Gaya', status: 'Active', joinedAt: '2026-01-12' },
+  { id: 'WORKER002', name: 'Ravi Kumar', email: 'ravi.kumar@healthnext.org', phone: '+91 98765 01012', role: 'Field Health Worker', district: 'Nalanda', status: 'Active', joinedAt: '2026-02-04' },
+  { id: 'WORKER003', name: 'Meena Joshi', email: 'meena.joshi@healthnext.org', phone: '+91 98765 01013', role: 'Clinical Reviewer', district: 'Patna', status: 'Invited', joinedAt: '2026-03-18' },
+]
 
 const demoPatients = [
   ['Asha Devi', '9876501001', 29, 'Female', 11.8, 96, 6.4, 'Negative', '118/76', 98],
@@ -24,8 +31,8 @@ function seedPatients() {
       id: `P${String(index + 1).padStart(3, '0')}`,
       name, phone, age, gender, email: '', address: '', medicalHistory: '', createdAt: firstDate,
       testHistory: [
-        { sessionId: `DEMO-${String(index + 1).padStart(3, '0')}-01`, date: firstDate, ...base },
-        { sessionId: `DEMO-${String(index + 1).padStart(3, '0')}-02`, date: latestDate, ...base, hemoglobin: Number((hemoglobin + 0.3).toFixed(1)), glucose: glucose + 4, spo2: Math.max(94, spo2 - 1) },
+        { sessionId: `DEMO-${String(index + 1).padStart(3, '0')}-01`, date: firstDate, workerId: 'WORKER002', workerName: 'Ravi Kumar', deviceId: 'HN-BLE-002', ...base },
+        { sessionId: `DEMO-${String(index + 1).padStart(3, '0')}-02`, date: latestDate, workerId: 'WORKER001', workerName: 'Sunita Kumari', deviceId: 'HN-BLE-001', ...base, hemoglobin: Number((hemoglobin + 0.3).toFixed(1)), glucose: glucose + 4, spo2: Math.max(94, spo2 - 1) },
       ],
     }
   })
@@ -85,6 +92,26 @@ export function saveReport(report) {
   reports.push(report)
   write(REPORTS_KEY, reports)
   return report
+}
+
+export function getUsers() {
+  const users = read(USERS_KEY)
+  if (users.length) return users
+  write(USERS_KEY, demoUsers)
+  return demoUsers
+}
+
+export function saveUser(user) {
+  const users = getUsers()
+  const existingIndex = users.findIndex((item) => item.id === user.id)
+  if (existingIndex >= 0) users[existingIndex] = user
+  else users.push(user)
+  write(USERS_KEY, users)
+  return user
+}
+
+export function deleteUser(id) {
+  write(USERS_KEY, getUsers().filter((user) => user.id !== id))
 }
 
 export function createId(prefix) {

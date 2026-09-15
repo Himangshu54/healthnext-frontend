@@ -2,11 +2,19 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 
 const AUTH_KEY = 'healthnext.auth'
-const demoWorker = {
+const demoEmployee = {
   id: 'WORKER001',
   name: 'Sunita Kumari',
   email: 'sunita.kumari@healthnext.org',
   role: 'Field Health Worker',
+  accountType: 'employee',
+}
+const demoAdmin = {
+  id: 'ADMIN001',
+  name: 'Dr. Arjun Mehta',
+  email: 'admin@healthnext.org',
+  role: 'Organization Administrator',
+  accountType: 'admin',
 }
 
 const AuthContext = createContext(null)
@@ -25,13 +33,14 @@ export function AuthProvider({ children }) {
     else localStorage.removeItem(AUTH_KEY)
   }, [worker])
 
-  function login(identifier, password) {
+  function login(identifier, password, accountType) {
     const normalized = identifier.trim().toUpperCase()
-    if ((normalized === demoWorker.id || identifier.trim().toLowerCase() === demoWorker.email) && password === 'worker123') {
-      setWorker(demoWorker)
+    const account = accountType === 'admin' ? demoAdmin : demoEmployee
+    if ((normalized === account.id || identifier.trim().toLowerCase() === account.email) && password === (accountType === 'admin' ? 'admin123' : 'worker123')) {
+      setWorker(account)
       return { success: true }
     }
-    return { success: false, error: 'The Worker ID or password is incorrect.' }
+    return { success: false, error: `The ${accountType === 'admin' ? 'Organization ID' : 'Worker ID'} or password is incorrect.` }
   }
 
   function logout() {
@@ -45,4 +54,4 @@ export function useAuth() {
   return useContext(AuthContext)
 }
 
-export { demoWorker }
+export { demoAdmin, demoEmployee }
