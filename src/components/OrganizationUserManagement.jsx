@@ -74,7 +74,7 @@ function OrganizationUserManagement() {
           <label className="field"><span>Location *</span><input name="location" value={form.location} onChange={updateField} placeholder="Assigned location" required /></label>
           <label className="field"><span>Contact *</span><input name="phone" value={form.phone} onChange={updateField} placeholder="Phone number" required /></label>
           <label className="field"><span>Role *</span><select name="role" value={form.role} onChange={updateField}><option>Field Health Worker</option><option>Clinical Reviewer</option><option>Organization Manager</option></select></label>
-          <label className="field"><span>Status *</span><select name="status" value={form.status} onChange={updateField}><option>Active</option><option>Invited</option><option>Suspended</option></select></label>
+          <label className="field"><span>Status *</span><select name="status" value={form.status} onChange={updateField}><option>Active</option><option>Inactive</option></select></label>
           <div className="form-actions full-width"><button className="button button-primary" type="submit">{editingId ? 'Save changes' : 'Add user'}</button>{editingId && <button className="button button-secondary" type="button" onClick={resetForm}>Cancel</button>}</div>
         </form>
       </section>
