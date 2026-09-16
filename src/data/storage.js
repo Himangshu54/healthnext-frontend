@@ -61,6 +61,13 @@ export function getPatients() {
   return seeded
 }
 
+export function resetDemoPatients() {
+  const seeded = seedPatients()
+  write(PATIENTS_KEY, seeded)
+  window.dispatchEvent(new CustomEvent('healthnext:patient-updated'))
+  return seeded
+}
+
 export function findPatient(id) {
   return getPatients().find((patient) => patient.id.toLowerCase() === id.trim().toLowerCase())
 }
