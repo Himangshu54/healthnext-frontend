@@ -7,7 +7,7 @@ const RESULTS_KEY = 'healthnext.results'
 const demoUsers = [
   { id: 'WORKER001', name: 'Sunita Kumari', email: 'sunita.kumari@healthnext.org', phone: '+91 98765 01011', role: 'Field Health Worker', district: 'Gaya', status: 'Active', joinedAt: '2026-01-12' },
   { id: 'WORKER002', name: 'Ravi Kumar', email: 'ravi.kumar@healthnext.org', phone: '+91 98765 01012', role: 'Field Health Worker', district: 'Nalanda', status: 'Active', joinedAt: '2026-02-04' },
-  { id: 'WORKER003', name: 'Meena Joshi', email: 'meena.joshi@healthnext.org', phone: '+91 98765 01013', role: 'Clinical Reviewer', district: 'Patna', status: 'Invited', joinedAt: '2026-03-18' },
+  { id: 'WORKER003', name: 'Meena Joshi', email: 'meena.joshi@healthnext.org', phone: '+91 98765 01013', role: 'Clinical Reviewer', district: 'Patna', status: 'Active', joinedAt: '2026-03-18' },
 ]
 
 const demoPatients = [
@@ -124,7 +124,11 @@ export function saveReport(report) {
 
 export function getUsers() {
   const users = read(USERS_KEY)
-  if (users.length) return users
+  if (users.length) {
+    const normalized = users.map((user) => ({ ...user, status: user.status === 'Inactive' ? 'Inactive' : 'Active' }))
+    if (JSON.stringify(normalized) !== JSON.stringify(users)) write(USERS_KEY, normalized)
+    return normalized
+  }
   write(USERS_KEY, demoUsers)
   return demoUsers
 }
@@ -139,7 +143,7 @@ export function saveUser(user) {
 }
 
 export function deleteUser(id) {
-  write(USERS_KEY, getUsers().filter((user) => user.id !== id))
+  write(USERS_KEY, getUsers().map((user) => user.id === id ? { ...user, status: 'Inactive' } : user))
 }
 
 export function createId(prefix) {

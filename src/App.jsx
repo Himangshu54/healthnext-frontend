@@ -1,3 +1,4 @@
+/* eslint-disable no-unused-vars */
 import { useEffect, useRef, useState } from 'react'
 import { ArrowRight, BarChart3, Bluetooth, Check, ChevronDown, Eye, EyeOff, FileText, HeartPulse, Home, LogOut, Menu, MonitorSmartphone, Plus, Settings, ShieldCheck, UserCog, UserRound, Users, X } from 'lucide-react'
 import { AuthProvider, useAuth } from './context/AuthContext'
@@ -101,4 +102,5 @@ function Profile() { const { worker, logout } = useAuth(); return <><PageHeader 
 
 function Router() { const { worker } = useAuth(); const [path, setPath] = useState(window.location.pathname); useEffect(() => { const onPop = () => setPath(window.location.pathname); window.addEventListener('popstate', onPop); return () => window.removeEventListener('popstate', onPop) }, []); useEffect(() => { const protectedPath = path !== '/login'; if (!worker && protectedPath) navigate('/login'); if (worker && path === '/login') navigate(worker.accountType === 'admin' ? '/admin' : '/') }, [path, worker]); if (!worker) return <Login />; const pages = worker.accountType === 'admin' ? { '/admin': <AdminDashboard />, '/admin/users': <UserManagement />, '/admin/patients': <PatientDetails />, '/profile': <Profile /> } : { '/': <EmployeeDashboard />, '/create-session': <CreateSession />, '/patients': <EmployeePatientsTable />, '/generate-report': <PatientGenerateReport />, '/report-analysis': <PatientAnalysis />, '/profile': <Profile /> }; return <Shell path={path}>{pages[path] || (worker.accountType === 'admin' ? <AdminDashboard /> : <EmployeeDashboard />)}</Shell> }
 function App() { return <AuthProvider><PatientProvider><Router /></PatientProvider></AuthProvider> }
+
 export default App
