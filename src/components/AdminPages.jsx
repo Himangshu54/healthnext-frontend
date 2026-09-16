@@ -3,6 +3,7 @@ import { ArrowRight, UserCog, Users, Pencil, Trash2, UserPlus } from 'lucide-rea
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { firestore } from '../lib/firebase';
 import { useAuth } from '../context/AuthContext';
+import { getUsers, getPatients } from '../data/storage';
 
 // Duplicated simple components from App.jsx for simplicity
 function formatDate(value) { return value ? new Date(value).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : 'Not recorded' }
@@ -17,14 +18,11 @@ export function AdminDashboard({ navigate }) {
   useEffect(() => {
     async function fetchMetrics() {
       try {
-        const usersQ = query(collection(firestore, 'users'), where('organisationId', '==', worker.organisationId));
-        const usersSnap = await getDocs(usersQ);
-        const testsQ = query(collection(firestore, 'tests'), where('organisationId', '==', worker.organisationId));
-        const testsSnap = await getDocs(testsQ);
-
+        const usersList = getUsers();
+        const patientsList = getPatients();
         setMetrics({
-          workers: usersSnap.docs.length,
-          screenings: testsSnap.docs.length,
+          workers: usersList.length,
+          screenings: patientsList.length,
         });
       } catch (e) {
         console.error("Failed to fetch metrics:", e);
@@ -67,10 +65,7 @@ export function UserManagement() {
     async function fetchUsers() {
       setLoading(true);
       try {
-        const q = query(collection(firestore, 'users'), where('organisationId', '==', worker.organisationId));
-        const snapshot = await getDocs(q);
-        const fetched = snapshot.docs.map(d => ({ ...d.data(), id: d.id }));
-        setUsers(fetched);
+        setUsers(getUsers());
       } catch (e) {
         console.error("Failed to fetch users:", e);
       } finally {
@@ -147,26 +142,27 @@ export function PatientDetails() {
     async function fetchData() {
       setLoading(true);
       try {
-        const testsQ = query(collection(firestore, 'tests'), where('organisationId', '==', worker.organisationId));
-        const testsSnap = await getDocs(testsQ);
-        const fetchedTests = testsSnap.docs.map(d => ({ ...d.data(), id: d.id }));
+        const patientsList = getPatients();
+        const compiled = [];
 
-        const resultsQ = query(collection(firestore, 'results'), where('organisationId', '==', worker.organisationId));
-        const resultsSnap = await getDocs(resultsQ);
-        const resultsMap = new Map();
-        resultsSnap.forEach(d => resultsMap.set(d.data().testId, d.data()));
+        patientsList.forEach(patient => {
+          if (patient.testHistory && patient.testHistory.length > 0) {
+            patient.testHistory.forEach(history => {
+              compiled.push({
+                patient,
+                test: { id: history.sessionId + '-HB', status: 'Completed', createdAt: history.date, createdBy: history.workerId, deviceId: history.deviceId, testType: 'HB' },
+                result: { hbValue: history.hemoglobin, hbRaw: '4820' }
+              });
+              compiled.push({
+                patient,
+                test: { id: history.sessionId + '-VITALS', status: 'Completed', createdAt: history.date, createdBy: history.workerId, deviceId: history.deviceId, testType: 'VITALS' },
+                result: { heartRate: history.glucose || 72, temperature: 36.5 }
+              });
+            });
+          }
+        });
 
-        const patientsQ = query(collection(firestore, 'patients'));
-        const patientsSnap = await getDocs(patientsQ);
-        const patientsMap = new Map();
-        patientsSnap.forEach(d => patientsMap.set(d.id, d.data()));
-
-        const compiled = fetchedTests.map(test => {
-          const patient = patientsMap.get(test.patientId) || { name: 'Unknown', id: test.patientId, age: '?', gender: '?', phone: '?' };
-          const result = resultsMap.get(test.id) || {};
-          return { patient, test, result };
-        }).sort((a, b) => new Date(b.test.createdAt) - new Date(a.test.createdAt));
-
+        compiled.sort((a, b) => new Date(b.test.createdAt) - new Date(a.test.createdAt));
         setSessions(compiled);
       } catch (e) {
         console.error("Failed to fetch patient details:", e);

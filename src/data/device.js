@@ -7,6 +7,7 @@ export const DEVICE_PROTOCOL = {
 let writeCharacteristic = null;
 let notifyCharacteristic = null;
 let buffer = '';
+let latestReadings = {};
 let currentDevice = null;
 let currentServer = null;
 const decoder = new TextDecoder('utf-8');
@@ -139,6 +140,21 @@ function handleCharacteristicValueChanged(event) {
 }
 
 function handleDeviceMessage(message) {
+  // Cache test readings for later retrieval via getLatestReadings()
+  if (message.type === 'MEASUREMENT' || message.type === 'TEST_COMPLETE') {
+    if (message.testType === 'VITALS') {
+      if (message.heartRate !== undefined) latestReadings.heartRate = message.heartRate;
+      if (message.temperature !== undefined) latestReadings.temperature = message.temperature;
+    }
+    if (message.testType === 'HB') {
+      if (message.hbValue !== undefined) latestReadings.hbValue = message.hbValue;
+      if (message.hbRaw !== undefined) latestReadings.hbRaw = message.hbRaw;
+    }
+  }
   const event = new CustomEvent('healthnext-device-message', { detail: message });
   window.dispatchEvent(event);
+}
+
+export function getLatestReadings() {
+  return { ...latestReadings };
 }

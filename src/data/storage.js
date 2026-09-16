@@ -82,6 +82,7 @@ export function savePatient(patient) {
   if (existingIndex >= 0) patients[existingIndex] = patient
   else patients.push(patient)
   write(PATIENTS_KEY, patients)
+  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('healthnext:patient-updated'))
   return patient
 }
 
