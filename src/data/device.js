@@ -8,75 +8,134 @@ let writeCharacteristic = null;
 let notifyCharacteristic = null;
 let buffer = '';
 let currentDevice = null;
+let currentServer = null;
+const decoder = new TextDecoder('utf-8');
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 export function isBluetoothSupported() {
   return typeof navigator !== 'undefined' && 'bluetooth' in navigator
 }
 
-export async function connectHealthNextDevice() {
-  if (!isBluetoothSupported()) throw new Error('Bluetooth device linking is not supported in this browser. Please use a compatible browser/device.')
-  
-  const device = await navigator.bluetooth.requestDevice({ 
-    filters: [{ services: [DEVICE_PROTOCOL.serviceUuid] }]
-  });
-  
-  if (!device.gatt) throw new Error('The selected Bluetooth device does not provide a GATT server.')
-  
-  const server = await device.gatt.connect()
-  const service = await server.getPrimaryService(DEVICE_PROTOCOL.serviceUuid)
-  
-  notifyCharacteristic = await service.getCharacteristic(DEVICE_PROTOCOL.notifyCharacteristicUuid)
-  writeCharacteristic = await service.getCharacteristic(DEVICE_PROTOCOL.writeCharacteristicUuid)
-  
-  buffer = '';
-  notifyCharacteristic.addEventListener('characteristicvaluechanged', handleCharacteristicValueChanged)
-  await notifyCharacteristic.startNotifications()
-
-  currentDevice = device;
-  return { device, server }
-}
-
-export function disconnectHealthNextDevice() {
+function clearHandles() {
   if (notifyCharacteristic) {
-    notifyCharacteristic.removeEventListener('characteristicvaluechanged', handleCharacteristicValueChanged)
-    notifyCharacteristic.stopNotifications().catch(() => {});
-  }
-  if (currentDevice && currentDevice.gatt && currentDevice.gatt.connected) {
-    currentDevice.gatt.disconnect()
+    notifyCharacteristic.removeEventListener('characteristicvaluechanged', handleCharacteristicValueChanged);
   }
   notifyCharacteristic = null;
   writeCharacteristic = null;
-  currentDevice = null;
+  currentServer = null;
   buffer = '';
+}
+
+function handleDisconnected() {
+  clearHandles();
+}
+
+export async function connectHealthNextDevice(retries = 3) {
+  if (!isBluetoothSupported()) throw new Error('Bluetooth device linking is not supported in this browser. Please use a compatible browser/device.')
+  
+  if (!currentDevice) {
+    currentDevice = await navigator.bluetooth.requestDevice({ 
+      filters: [{ namePrefix: 'HealthNext' }],
+      optionalServices: [DEVICE_PROTOCOL.serviceUuid]
+    });
+    
+    currentDevice.removeEventListener('gattserverdisconnected', handleDisconnected);
+    currentDevice.addEventListener('gattserverdisconnected', handleDisconnected);
+  }
+  
+  let lastError = null;
+
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      clearHandles();
+
+      if (currentDevice.gatt.connected) currentDevice.gatt.disconnect();
+      await sleep(200);
+
+      const server = await currentDevice.gatt.connect();
+      await sleep(300);
+
+      if (!server.connected) throw new Error('Link dropped before discovery');
+
+      const service = await server.getPrimaryService(DEVICE_PROTOCOL.serviceUuid);
+      const notifyChar = await service.getCharacteristic(DEVICE_PROTOCOL.notifyCharacteristicUuid);
+      const writeChar = await service.getCharacteristic(DEVICE_PROTOCOL.writeCharacteristicUuid);
+
+      notifyChar.removeEventListener('characteristicvaluechanged', handleCharacteristicValueChanged);
+      notifyChar.addEventListener('characteristicvaluechanged', handleCharacteristicValueChanged);
+      await notifyChar.startNotifications();
+
+      currentServer = server;
+      notifyCharacteristic = notifyChar;
+      writeCharacteristic = writeChar;
+      buffer = '';
+
+      // Firmware greets on subscription; ping as a fallback.
+      await sleep(400);
+      try {
+        await sendCommand({ type: 'PING' });
+      } catch {
+        // ignore ping fail
+      }
+
+      return { device: currentDevice, server: currentServer }
+    } catch (err) {
+      lastError = err;
+      clearHandles();
+      try { currentDevice.gatt.disconnect(); } catch { /* ignore */ }
+      if (attempt < retries) await sleep(600 * attempt);
+    }
+  }
+
+  throw lastError || new Error('Could not connect to HealthNext device');
+}
+
+export function disconnectHealthNextDevice() {
+  clearHandles();
+  if (currentDevice && currentDevice.gatt && currentDevice.gatt.connected) {
+    currentDevice.gatt.disconnect();
+  }
+  currentDevice = null;
 }
 
 export async function sendCommand(commandObj) {
   if (!writeCharacteristic) throw new Error('Not connected to device');
   const jsonStr = JSON.stringify(commandObj) + '\n';
   const encoder = new TextEncoder();
-  await writeCharacteristic.writeValue(encoder.encode(jsonStr));
+  const bytes = encoder.encode(jsonStr);
+  
+  if (writeCharacteristic.properties.writeWithoutResponse && writeCharacteristic.writeValueWithoutResponse) {
+    await writeCharacteristic.writeValueWithoutResponse(bytes);
+  } else if (writeCharacteristic.properties.write && writeCharacteristic.writeValueWithResponse) {
+    await writeCharacteristic.writeValueWithResponse(bytes);
+  } else {
+    await writeCharacteristic.writeValue(bytes);
+  }
 }
 
 function handleCharacteristicValueChanged(event) {
   const value = event.target.value;
-  const decoder = new TextDecoder('utf-8');
-  const chunk = decoder.decode(value);
+  const chunk = decoder.decode(value, { stream: true });
   buffer += chunk;
   
   let newlineIndex;
   while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
-    const messageStr = buffer.slice(0, newlineIndex);
+    const messageStr = buffer.slice(0, newlineIndex).trim();
     buffer = buffer.slice(newlineIndex + 1);
     
-    if (messageStr.trim() === '') continue;
+    if (messageStr === '') continue;
 
     try {
-      const message = JSON.parse(messageStr.trim());
+      const message = JSON.parse(messageStr);
       handleDeviceMessage(message);
-    } catch(e) {
-      console.error("Failed to parse BLE message:", messageStr, e);
+    } catch {
+      // Partial or malformed frame - ignore and keep buffering
     }
   }
+
+  // Safety valve against a runaway buffer
+  if (buffer.length > 2048) buffer = '';
 }
 
 function handleDeviceMessage(message) {

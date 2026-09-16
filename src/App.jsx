@@ -1,4 +1,3 @@
-/* eslint-disable no-unused-vars */
 import { useEffect, useRef, useState } from 'react'
 import { ArrowRight, BarChart3, Bluetooth, Check, ChevronDown, Eye, EyeOff, FileText, HeartPulse, Home, LogOut, Menu, MonitorSmartphone, Plus, Settings, ShieldCheck, UserCog, UserRound, Users, X } from 'lucide-react'
 import { AuthProvider, useAuth } from './context/AuthContext'
@@ -52,12 +51,15 @@ function ProfileMenu() {
 
 function Shell({ children, path }) {
   const { worker } = useAuth(); const visibleNavItems = worker.accountType === 'admin' ? adminNavItems : navItems; const [mobileOpen, setMobileOpen] = useState(false); const [deviceState, setDeviceState] = useState({ status: isBluetoothSupported() ? 'disconnected' : 'unsupported', device: null, message: '' }); 
+  const deviceReadyRef = useRef(false);
   
   useEffect(() => {
     function handleMessage(e) {
       const msg = e.detail;
-      if (msg && msg.type === 'DEVICE_READY') {
-        setDeviceState(prev => (prev.status === 'waiting' || prev.status === 'ready') ? { ...prev, status: 'ready', message: 'Device ready.' } : prev);
+      if (msg && (msg.type === 'DEVICE_READY' || msg.type === 'DEVICE_STATUS')) {
+        deviceReadyRef.current = true;
+        const messageText = msg.readyForTest === false ? 'Device busy.' : 'Device ready.';
+        setDeviceState(prev => (prev.status === 'connecting' || prev.status === 'waiting' || prev.status === 'ready') ? { ...prev, status: 'ready', message: messageText } : prev);
       }
     }
     window.addEventListener('healthnext-device-message', handleMessage);
@@ -69,13 +71,18 @@ function Shell({ children, path }) {
   async function linkDevice() { 
     if (deviceState.status === 'unsupported') return setDeviceState({ ...deviceState, message: 'Bluetooth device linking is not supported in this browser. Please use a compatible browser/device.' }); 
     setDeviceState({ ...deviceState, status: 'connecting', message: '' }); 
+    deviceReadyRef.current = false;
     try { 
       const result = await connectHealthNextDevice(); 
       result.device.addEventListener('gattserverdisconnected', () => {
         disconnectHealthNextDevice();
         setDeviceState({ status: 'disconnected', device: null, message: 'Device disconnected.' })
       }); 
-      setDeviceState({ status: 'waiting', device: result.device, message: 'Connected. Waiting for device...' }) 
+      if (deviceReadyRef.current) {
+        setDeviceState({ status: 'ready', device: result.device, message: 'Device ready.' }) 
+      } else {
+        setDeviceState({ status: 'waiting', device: result.device, message: 'Connected. Waiting for device...' }) 
+      }
     } catch (connectionError) { 
       setDeviceState({ status: 'disconnected', device: null, message: connectionError.name === 'NotFoundError' ? '' : connectionError.message }) 
     } 
