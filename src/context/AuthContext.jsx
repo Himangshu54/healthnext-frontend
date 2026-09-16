@@ -1,57 +1,99 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useEffect, useState } from 'react'
-
-const AUTH_KEY = 'healthnext.auth'
-const demoEmployee = {
-  id: 'WORKER001',
-  name: 'Sunita Kumari',
-  email: 'sunita.kumari@healthnext.org',
-  role: 'Field Health Worker',
-  accountType: 'employee',
-}
-const demoAdmin = {
-  id: 'ADMIN001',
-  name: 'Dr. Arjun Mehta',
-  email: 'admin@healthnext.org',
-  role: 'Organization Administrator',
-  accountType: 'admin',
-}
+import { browserLocalPersistence, onAuthStateChanged, setPersistence, signInWithEmailAndPassword, signOut } from 'firebase/auth'
+import { doc, getDoc } from 'firebase/firestore'
+import { firebaseAuth, firestore } from '../lib/firebase'
 
 const AuthContext = createContext(null)
 
 export function AuthProvider({ children }) {
-  const [worker, setWorker] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem(AUTH_KEY))
-    } catch {
-      return null
-    }
-  })
+  const [worker, setWorker] = useState(null)
+  const [authLoading, setAuthLoading] = useState(true)
 
   useEffect(() => {
-    if (worker) localStorage.setItem(AUTH_KEY, JSON.stringify(worker))
-    else localStorage.removeItem(AUTH_KEY)
-  }, [worker])
+    let active = true
+    let unsubscribe
 
-  function login(identifier, password, accountType) {
-    const normalized = identifier.trim().toUpperCase()
-    const account = accountType === 'admin' ? demoAdmin : demoEmployee
-    if ((normalized === account.id || identifier.trim().toLowerCase() === account.email) && password === (accountType === 'admin' ? 'admin123' : 'worker123')) {
-      setWorker(account)
-      return { success: true }
+    async function restoreAuth() {
+      try {
+        await setPersistence(firebaseAuth, browserLocalPersistence)
+        unsubscribe = onAuthStateChanged(firebaseAuth, async (user) => {
+          if (!active) return
+          if (!user) {
+            setWorker(null)
+            setAuthLoading(false)
+            return
+          }
+
+          try {
+            const profileSnapshot = await getDoc(doc(firestore, 'users', user.uid))
+            if (!profileSnapshot.exists()) throw new Error('Your Firebase user profile could not be found.')
+            const profile = profileSnapshot.data()
+            if (profile.status !== 'ACTIVE') throw new Error('This account is suspended.')
+            
+            let accountType = 'employee'
+            if (profile.role === 'Organization Administrator') {
+              accountType = 'admin'
+            } else if (profile.role !== 'EMPLOYEE') {
+              throw new Error('This account role is not supported.')
+            }
+
+            if (!profile.userId || !profile.organisationId || !profile.name || !profile.email) throw new Error('Your Firebase user profile is incomplete.')
+            setWorker({ ...profile, id: profile.userId, firebaseUid: user.uid, accountType })
+          } catch {
+            await signOut(firebaseAuth)
+            if (active) setWorker(null)
+          } finally {
+            if (active) setAuthLoading(false)
+          }
+        })
+      } catch {
+        if (active) {
+          setWorker(null)
+          setAuthLoading(false)
+        }
+      }
     }
-    return { success: false, error: `The ${accountType === 'admin' ? 'Organization ID' : 'Worker ID'} or password is incorrect.` }
+
+    restoreAuth()
+    return () => {
+      active = false
+      unsubscribe?.()
+    }
+  }, [])
+
+  async function login(identifier, password, accountType) {
+    try {
+      const credential = await signInWithEmailAndPassword(firebaseAuth, identifier.trim(), password)
+      const profileSnapshot = await getDoc(doc(firestore, 'users', credential.user.uid))
+      if (!profileSnapshot.exists()) throw new Error('Your Firebase user profile could not be found.')
+      const profile = profileSnapshot.data()
+      if (profile.status !== 'ACTIVE') throw new Error('This account is suspended.')
+      
+      if (accountType === 'admin') {
+        if (profile.role !== 'Organization Administrator') throw new Error('This account is not authorized for the organization application.')
+      } else {
+        if (profile.role !== 'EMPLOYEE') throw new Error('This account is not authorized for the employee application.')
+      }
+
+      if (!profile.userId || !profile.organisationId || !profile.name || !profile.email) throw new Error('Your Firebase user profile is incomplete.')
+      setWorker({ ...profile, id: profile.userId, firebaseUid: credential.user.uid, accountType })
+      return { success: true }
+    } catch (error) {
+      await signOut(firebaseAuth).catch(() => {})
+      return { success: false, error: error.code?.startsWith('auth/') ? 'The email or password is incorrect.' : error.message }
+    }
   }
 
-  function logout() {
+  async function logout() {
+    await signOut(firebaseAuth).catch(() => {})
     setWorker(null)
   }
 
-  return <AuthContext.Provider value={{ worker, login, logout }}>{children}</AuthContext.Provider>
+  return <AuthContext.Provider value={{ worker, authLoading, login, logout }}>{children}</AuthContext.Provider>
 }
 
 export function useAuth() {
   return useContext(AuthContext)
 }
 
-export { demoAdmin, demoEmployee }

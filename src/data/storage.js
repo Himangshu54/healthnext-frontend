@@ -1,6 +1,8 @@
 const PATIENTS_KEY = 'healthnext.patients'
 const REPORTS_KEY = 'healthnext.reports'
 const USERS_KEY = 'healthnext.users'
+const TESTS_KEY = 'healthnext.tests'
+const RESULTS_KEY = 'healthnext.results'
 
 const demoUsers = [
   { id: 'WORKER001', name: 'Sunita Kumari', email: 'sunita.kumari@healthnext.org', phone: '+91 98765 01011', role: 'Field Health Worker', district: 'Gaya', status: 'Active', joinedAt: '2026-01-12' },
@@ -81,6 +83,32 @@ export function savePatient(patient) {
   else patients.push(patient)
   write(PATIENTS_KEY, patients)
   return patient
+}
+
+export function getTests() {
+  return read(TESTS_KEY)
+}
+
+export function saveTest(test) {
+  const tests = getTests()
+  const existingIndex = tests.findIndex((item) => item.testId === test.testId)
+  if (existingIndex >= 0) tests[existingIndex] = test
+  else tests.push(test)
+  write(TESTS_KEY, tests)
+  return test
+}
+
+export function getResults() {
+  return read(RESULTS_KEY)
+}
+
+export function saveResult(result) {
+  const results = getResults()
+  const existingIndex = results.findIndex((item) => item.resultId === result.resultId)
+  if (existingIndex >= 0) results[existingIndex] = result
+  else results.push(result)
+  write(RESULTS_KEY, results)
+  return result
 }
 
 export function getReports() {
